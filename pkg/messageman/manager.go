@@ -135,31 +135,51 @@ func (m *Manager) ProcessFrame(evt *gomavlib.EventFrame) {
 	}
 
 	// if message has a target, route only to it
+	// hasTarget: has the systemID/componentID fields,
+	// they can still be 0!
 	systemID, componentID, hasTarget := getTarget(evt.Message())
-	if hasTarget && systemID > 0 {
-		var key *remoteNodeKey
-		if componentID == 0 {
-			key = m.findNodeBySystemID(systemID)
-		} else {
-			key = m.findNodeBySystemAndComponentID(systemID, componentID)
-		}
 
-		if key != nil {
-			if key.channel == evt.Channel {
-				log.Printf("Warning: channel %s attempted to send message to itself, discarding", key.channel)
-			} else {
-				m.Node.WriteFrameTo(key.channel, evt.Frame) //nolint:errcheck
-				return
+	if hasTarget {
+		for key := range m.remoteNodes {
+			if (systemID == 0 || systemID == key.systemID) && (componentID == 0 || componentID == key.componentID) {
+				if key.channel == evt.Channel {
+					log.Printf("Warning: channel %s attempted to send message to itself, discarding", key.channel)
+				} else {
+					m.Node.WriteFrameTo(key.channel, evt.Frame) //nolint:errcheck
+				}
 			}
-		} else {
-			log.Printf(
-				"Warning: received message addressed to unexistent node with systemID=%d and componentID=%d",
-				systemID, componentID)
 		}
+	} else {
+		// otherwise, route message to every channel
+		m.Node.WriteFrameExcept(evt.Channel, evt.Frame) //nolint:errcheck
 	}
 
-	// otherwise, route message to every channel
-	m.Node.WriteFrameExcept(evt.Channel, evt.Frame) //nolint:errcheck
+	///
+
+	// if hasTarget && systemID > 0 {
+	// 	var key *remoteNodeKey
+	// 	if componentID == 0 {
+	// 		key = m.findNodeBySystemID(systemID)
+	// 	} else {
+	// 		key = m.findNodeBySystemAndComponentID(systemID, componentID)
+	// 	}
+
+	// 	if key != nil {
+	// 		if key.channel == evt.Channel {
+	// 			log.Printf("Warning: channel %s attempted to send message to itself, discarding", key.channel)
+	// 		} else {
+	// 			m.Node.WriteFrameTo(key.channel, evt.Frame) //nolint:errcheck
+	// 			return
+	// 		}
+	// 	} else {
+	// 		log.Printf(
+	// 			"Warning: received message addressed to unexistent node with systemID=%d and componentID=%d",
+	// 			systemID, componentID)
+	// 	}
+	// }
+
+	// // otherwise, route message to every channel
+	// m.Node.WriteFrameExcept(evt.Channel, evt.Frame) //nolint:errcheck
 }
 
 // ProcessChannelClose processes a EventChannelClose.
